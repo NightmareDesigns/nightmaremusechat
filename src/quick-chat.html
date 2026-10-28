@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Nightmare Muse Chat — Quick Chat</title>
+    <style>
+      :root { color-scheme: dark; }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0; height: 100vh; display: flex; flex-direction: column;
+        font-family: "Segoe UI", system-ui, sans-serif;
+        background: #141414; color: #f2f2f2;
+        border: 1px solid #333; border-radius: 14px; overflow: hidden;
+      }
+      header {
+        -webkit-app-region: drag;
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 12px 14px; background: #1c1c1c; border-bottom: 1px solid #2c2c2c;
+      }
+      header strong { font-size: 14px; letter-spacing: .02em; }
+      header span { font-size: 12px; color: #a8a8a8; }
+      button {
+        -webkit-app-region: no-drag; cursor: pointer; border: 0; border-radius: 9px;
+        padding: 8px 12px; background: #2b2b2b; color: #f2f2f2; font-size: 13px;
+      }
+      button:hover { background: #3a3a3a; }
+      main { flex: 1; padding: 18px; display: flex; flex-direction: column; gap: 14px; }
+      p { margin: 0; line-height: 1.5; color: #d8d8d8; font-size: 14px; }
+      .primary { background: #f2f2f2; color: #111; font-weight: 600; padding: 12px; }
+      .primary:hover { background: #fff; }
+      kbd {
+        background: #2b2b2b; border: 1px solid #444; border-bottom-width: 2px;
+        border-radius: 5px; padding: 1px 6px; font-family: inherit; font-size: 12px;
+      }
+      footer { padding: 12px 14px; font-size: 12px; color: #8f8f8f; border-top: 1px solid #2c2c2c; position: relative; z-index: 1; }
+      /* Signature Matrix rain: super see-through, but there */
+      #matrix-rain { position: fixed; inset: 0; z-index: 0; pointer-events: none; opacity: 0.07; }
+      header, main { position: relative; z-index: 1; }
+      header { background: rgba(28,28,28,.93); }
+      main { background: rgba(20,20,20,.94); }
+      .brand { margin-top: auto; }
+      .brand img { width: 100%; display: block; border-radius: 10px; }
+    </style>
+  </head>
+  <body>
+    <canvas id="matrix-rain" aria-hidden="true"></canvas>
+    <header>
+      <div><strong>Nightmare Muse Chat</strong> <span>Quick Chat</span></div>
+      <button id="close" type="button" aria-label="Close quick chat">✕</button>
+    </header>
+    <main>
+      <p>Jump straight into Muse without hunting for the window or your browser tab.</p>
+      <button class="primary" id="open" type="button">Open Nightmare Muse Chat</button>
+      <button id="voice" type="button">🎤 Voice — talk &amp; hear</button>
+      <p>Tip: press <kbd>Alt</kbd> + <kbd>Space</kbd> anywhere in Windows to open or hide this again. <kbd>Alt</kbd> + <kbd>V</kbd> opens Voice.</p>
+      <div class="brand"><img src="../assets/logo.jpg" alt="Nightmare Designs" /></div>
+    </main>
+    <footer>Unofficial community client for Muse (muse.ai) — not affiliated with Meta &nbsp;·&nbsp; <button id="rain-toggle" type="button" style="padding:2px 8px;font-size:12px;">Rain: On</button></footer>
+    <script>
+      const api = window.museDesktop;
+      document.getElementById('open').addEventListener('click', () => api && api.openMain());
+      document.getElementById('voice').addEventListener('click', () => api && api.openVoice());
+      document.getElementById('close').addEventListener('click', () => api && api.hideQuickChat());
+      window.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && api) api.hideQuickChat();
+      });
+
+      // Matrix rain — light, throttled, pauses when hidden, respects reduced motion.
+      (() => {
+        if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+        const canvas = document.getElementById('matrix-rain');
+        let enabled = localStorage.getItem('matrixRain') !== 'off';
+        const btn = document.getElementById('rain-toggle');
+        const apply = () => {
+          canvas.style.display = enabled ? '' : 'none';
+          if (btn) btn.textContent = enabled ? 'Rain: On' : 'Rain: Off';
+        };
+        if (btn) btn.addEventListener('click', () => {
+          enabled = !enabled;
+          localStorage.setItem('matrixRain', enabled ? 'on' : 'off');
+          apply();
+        });
+        apply();
+        const ctx = canvas.getContext('2d');
+        const GLYPHS = 'アカサタナハマヤラワ0123456789{}();=>+-*/<>#$';
+        const FONT = 14;
+        let cols = 0, drops = [];
+        const resize = () => {
+          canvas.width = window.innerWidth; canvas.height = window.innerHeight;
+          cols = Math.floor(canvas.width / FONT);
+          drops = Array.from({ length: cols }, () => Math.floor(Math.random() * -60));
+        };
+        resize(); window.addEventListener('resize', resize);
+        let last = 0;
+        const frame = (ts) => {
+          requestAnimationFrame(frame);
+          if (!enabled || document.hidden || ts - last < 50) return;
+          last = ts;
+          ctx.fillStyle = 'rgba(0,0,0,0.08)'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+          ctx.font = FONT + 'px monospace'; ctx.fillStyle = '#00e676';
+          for (let i = 0; i < cols; i++) {
+            ctx.fillText(GLYPHS[Math.floor(Math.random() * GLYPHS.length)], i * FONT, drops[i] * FONT);
+            if (drops[i] * FONT > canvas.height && Math.random() > 0.976) drops[i] = 0;
+            drops[i]++;
+          }
+        };
+        requestAnimationFrame(frame);
+      })();
+    </script>
+  </body>
+</html>

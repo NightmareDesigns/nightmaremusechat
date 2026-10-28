@@ -1,0 +1,401 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Nightmare Muse Chat — Voice</title>
+    <style>
+      :root { color-scheme: dark; }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0; height: 100vh; display: flex; flex-direction: column;
+        font-family: "Segoe UI", system-ui, sans-serif;
+        background: #141414; color: #f2f2f2;
+        border: 1px solid #333; border-radius: 14px; overflow: hidden;
+      }
+      header {
+        -webkit-app-region: drag;
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 12px 14px; background: #1c1c1c; border-bottom: 1px solid #2c2c2c;
+      }
+      header strong { font-size: 14px; letter-spacing: .02em; }
+      header span { font-size: 12px; color: #a8a8a8; }
+      button {
+        -webkit-app-region: no-drag; cursor: pointer; border: 0; border-radius: 9px;
+        padding: 8px 12px; background: #2b2b2b; color: #f2f2f2; font-size: 13px;
+      }
+      button:hover { background: #3a3a3a; }
+      button:disabled { opacity: .45; cursor: default; }
+      main { flex: 1; padding: 16px; display: flex; flex-direction: column; gap: 12px; overflow-y: auto; }
+      h2 { margin: 0; font-size: 13px; color: #a8a8a8; text-transform: uppercase; letter-spacing: .06em; }
+      p { margin: 0; line-height: 1.5; color: #d8d8d8; font-size: 13px; }
+      .primary { background: #f2f2f2; color: #111; font-weight: 600; padding: 12px; }
+      .primary:hover { background: #fff; }
+      .primary.listening { background: #e5484d; color: #fff; }
+      .primary.listening:hover { background: #f2555a; }
+      .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+      .bubble {
+        background: #1c1c1c; border: 1px solid #333; border-radius: 9px;
+        padding: 10px; font-size: 14px; line-height: 1.5; min-height: 84px;
+        white-space: pre-wrap; word-break: break-word; color: #e8e8e8;
+      }
+      .bubble.empty { color: #8f8f8f; }
+      select, input[type="range"] { -webkit-app-region: no-drag; }
+      select {
+        background: #2b2b2b; color: #f2f2f2; border: 1px solid #444;
+        border-radius: 8px; padding: 6px 8px; font-size: 13px; max-width: 100%;
+      }
+      label { font-size: 12px; color: #a8a8a8; display: flex; align-items: center; gap: 6px; }
+      .status { font-size: 12px; color: #8f8f8f; min-height: 16px; }
+      .status.error { color: #ff9d9d; }
+      .status.ok { color: #7ee2a8; }
+      .switch { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #d8d8d8; }
+      .switch input { accent-color: #e5484d; width: 16px; height: 16px; }
+      footer { padding: 10px 14px; font-size: 12px; color: #8f8f8f; border-top: 1px solid #2c2c2c; position: relative; z-index: 1; }
+      /* Signature Matrix rain: super see-through, but there */
+      #matrix-rain { position: fixed; inset: 0; z-index: 0; pointer-events: none; opacity: 0.07; }
+      header, main, footer { position: relative; z-index: 1; }
+      header { background: rgba(28,28,28,.93); }
+      main { background: rgba(20,20,20,.94); }
+    </style>
+  </head>
+  <body>
+    <canvas id="matrix-rain" aria-hidden="true"></canvas>
+    <header>
+      <div><strong>Nightmare Muse Chat</strong> <span>Voice</span></div>
+      <button id="close" type="button" aria-label="Close voice window">✕</button>
+    </header>
+    <main>
+      <div class="status" id="bridge-status">Waiting for the Muse page…</div>
+
+      <h2>Talk</h2>
+      <p>Press Talk and speak — your words go straight into Muse and are sent. Nothing to copy, nothing to paste.</p>
+      <div class="row">
+        <button class="primary" id="talk" type="button">🎤 Talk</button>
+        <button id="clear-heard" type="button">Clear</button>
+      </div>
+      <div class="bubble empty" id="heard">Your words will appear here…</div>
+      <div class="status" id="talk-status">Ready.</div>
+
+      <h2>Hear</h2>
+      <p>Muse's replies are read aloud automatically as they arrive.</p>
+      <label class="switch">
+        <input type="checkbox" id="auto-hear" checked />
+        Read Muse's replies aloud
+      </label>
+      <div class="bubble empty" id="reply">Muse's reply will appear here…</div>
+      <div class="row">
+        <button id="stop-speak" type="button">Stop speaking</button>
+      </div>
+      <div class="row">
+        <label>Voice
+          <select id="voice" aria-label="Voice"></select>
+        </label>
+        <label>Style
+          <select id="style" aria-label="Voice style">
+            <option value="reaper" selected>Reaper</option>
+            <option value="normal">Normal</option>
+          </select>
+        </label>
+      </div>
+      <div class="row">
+        <label>Speed <input id="rate" type="range" min="0.5" max="2" step="0.1" value="1" /></label>
+        <span id="rate-val">1.0×</span>
+        <label>Pitch <input id="pitch" type="range" min="0.5" max="2" step="0.1" value="1" /></label>
+        <span id="pitch-val">1.0</span>
+      </div>
+      <div class="status" id="hear-status"></div>
+    </main>
+    <footer>Voice runs on your PC — talking uses the built-in speech service (needs internet), hearing uses Windows' own voices (works offline). Automatic: no copy, no paste.</footer>
+    <script>
+      const api = window.museDesktop;
+
+      document.getElementById('close').addEventListener('click', () => api && api.hideVoice());
+      window.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && api) api.hideVoice();
+      });
+
+      // ------------------------------------------------------------ bridge status
+      const bridgeEl = document.getElementById('bridge-status');
+      function setBridgeStatus(msg, cls) {
+        bridgeEl.textContent = msg;
+        bridgeEl.className = 'status' + (cls ? ' ' + cls : '');
+      }
+      if (api && api.voice && api.voice.onBridgeStatus) {
+        api.voice.onBridgeStatus((status) => {
+          if (!status) return;
+          if (status.type === 'bridge-ready') {
+            setBridgeStatus(
+              status.payload && status.payload.composer
+                ? 'Connected to Muse — Voice is automatic.'
+                : 'Connected to Muse, but the composer was not found yet — try opening a chat first.',
+              status.payload && status.payload.composer ? 'ok' : 'error'
+            );
+          } else if (status.type === 'bridge-error') {
+            setBridgeStatus('Voice bridge error: ' + ((status.payload && status.payload.reason) || 'unknown'), 'error');
+          }
+        });
+      }
+      if (api && api.voice && api.voice.onSendResult) {
+        api.voice.onSendResult((result) => {
+          if (!result) return;
+          if (result.type === 'sent') {
+            setTalkStatus('Sent to Muse.', 'ok');
+          } else if (result.type === 'send-error') {
+            var why = (result.payload && result.payload.reason) || 'unknown';
+            setTalkStatus(
+              why === 'composer-not-found'
+                ? 'Could not find the Muse composer — open a chat in the main window first.'
+                : 'Could not send that: ' + why,
+              'error'
+            );
+          }
+        });
+      }
+
+      // ------------------------------------------------------------ Talk (automatic)
+      const heardEl = document.getElementById('heard');
+      const talkBtn = document.getElementById('talk');
+      const talkStatus = document.getElementById('talk-status');
+      const clearBtn = document.getElementById('clear-heard');
+
+      const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+      let rec = null;
+      let listening = false;
+      let finalText = '';
+
+      function setTalkStatus(msg, cls) {
+        talkStatus.textContent = msg;
+        talkStatus.className = 'status' + (cls ? ' ' + cls : '');
+      }
+
+      function showHeard(text) {
+        heardEl.textContent = text || 'Your words will appear here…';
+        heardEl.classList.toggle('empty', !text);
+      }
+
+      function sendToMuse(text) {
+        var t = (text || '').trim();
+        if (!t) return;
+        if (api && api.voice && api.voice.sendMessage) {
+          api.voice.sendMessage(t);
+          setTalkStatus('Sending to Muse…');
+        } else {
+          setTalkStatus('Voice bridge is not available in this build.', 'error');
+        }
+      }
+
+      if (!SR) {
+        talkBtn.disabled = true;
+        setTalkStatus('Speech recognition is not available in this build.', 'error');
+      } else {
+        talkBtn.addEventListener('click', () => {
+          if (listening) { try { rec.stop(); } catch {} return; }
+          try { window.speechSynthesis.cancel(); } catch {}
+          finalText = '';
+          showHeard('');
+          rec = new SR();
+          rec.lang = 'en-US';
+          rec.interimResults = true;
+          rec.continuous = true;
+          rec.onresult = (event) => {
+            let interim = '';
+            for (let i = event.resultIndex; i < event.results.length; i++) {
+              const r = event.results[i];
+              if (r.isFinal) finalText += r[0].transcript;
+              else interim += r[0].transcript;
+            }
+            showHeard((finalText + interim).trim());
+            if (interim) setTalkStatus('Listening…');
+          };
+          rec.onerror = (event) => {
+            const why = event.error === 'not-allowed'
+              ? 'Microphone was blocked — allow it in Windows privacy settings, then try again.'
+              : event.error === 'network'
+              ? 'Speech service needs internet — check the connection and try again.'
+              : event.error === 'no-speech'
+              ? 'Did not hear anything — try again.'
+              : 'Speech error: ' + event.error;
+            setTalkStatus(why, 'error');
+          };
+          rec.onend = () => {
+            listening = false;
+            talkBtn.textContent = '🎤 Talk';
+            talkBtn.classList.remove('listening');
+            var text = heardEl.textContent.trim();
+            if (text && text !== 'Your words will appear here…') {
+              sendToMuse(text);
+            } else if (!talkStatus.classList.contains('error')) {
+              setTalkStatus('Ready.');
+            }
+          };
+          try {
+            rec.start();
+            listening = true;
+            talkBtn.textContent = '■ Stop';
+            talkBtn.classList.add('listening');
+            setTalkStatus('Listening… speak now.');
+          } catch (err) {
+            setTalkStatus('Could not start listening: ' + err.message, 'error');
+          }
+        });
+      }
+
+      clearBtn.addEventListener('click', () => {
+        finalText = '';
+        showHeard('');
+        setTalkStatus('Ready.');
+      });
+
+      // ------------------------------------------------------------ Hear (automatic)
+      const replyEl = document.getElementById('reply');
+      const autoHearEl = document.getElementById('auto-hear');
+      const stopBtn = document.getElementById('stop-speak');
+      const voiceSel = document.getElementById('voice');
+      const styleSel = document.getElementById('style');
+      const rateEl = document.getElementById('rate');
+      const pitchEl = document.getElementById('pitch');
+      const rateVal = document.getElementById('rate-val');
+      const pitchVal = document.getElementById('pitch-val');
+      const hearStatus = document.getElementById('hear-status');
+
+      function setHearStatus(msg, cls) {
+        hearStatus.textContent = msg;
+        hearStatus.className = 'status' + (cls ? ' ' + cls : '');
+      }
+
+      function showReply(text) {
+        replyEl.textContent = text || "Muse's reply will appear here…";
+        replyEl.classList.toggle('empty', !text);
+      }
+
+      let voices = [];
+      // Reaper style: deepest male voice (David), pitch dropped to the
+      // floor, rate slowed a touch — deep and ominous instead of robotic.
+      // Normal style: pitch and rate back to 1.0.
+      function applyStyle() {
+        const style = styleSel.value;
+        if (style === 'reaper') {
+          const idx = voices.findIndex(v => /david/i.test(v.name));
+          if (idx >= 0) voiceSel.value = String(idx);
+          rateEl.value = '0.8';
+          pitchEl.value = '0.5';
+        } else {
+          rateEl.value = '1';
+          pitchEl.value = '1';
+        }
+        rateVal.textContent = Number(rateEl.value).toFixed(1) + '×';
+        pitchVal.textContent = Number(pitchEl.value).toFixed(1);
+        try { localStorage.setItem('voiceStyle', style); } catch {}
+      }
+      try {
+        const savedStyle = localStorage.getItem('voiceStyle');
+        if (savedStyle === 'normal') styleSel.value = 'normal';
+      } catch {}
+      function loadVoices() {
+        voices = window.speechSynthesis ? window.speechSynthesis.getVoices() : [];
+        const prev = voiceSel.value;
+        voiceSel.innerHTML = '';
+        if (!voices.length) {
+          const opt = document.createElement('option');
+          opt.textContent = 'Default voice';
+          opt.value = '';
+          voiceSel.appendChild(opt);
+          return;
+        }
+        const en = voices.filter(v => (v.lang || '').toLowerCase().startsWith('en'));
+        const list = en.length ? en : voices;
+        list.forEach((v, i) => {
+          const opt = document.createElement('option');
+          opt.value = String(voices.indexOf(v));
+          opt.textContent = v.name + (v.lang ? ' (' + v.lang + ')' : '');
+          voiceSel.appendChild(opt);
+          if (v.default) voiceSel.value = opt.value;
+        });
+        if (prev && voiceSel.querySelector('option[value="' + prev + '"]')) voiceSel.value = prev;
+        try {
+          const saved = localStorage.getItem('voiceName');
+          if (saved) {
+            const idx = voices.findIndex(v => v.name === saved);
+            if (idx >= 0) voiceSel.value = String(idx);
+          }
+        } catch {}
+        applyStyle();
+      }
+      if (window.speechSynthesis) {
+        loadVoices();
+        window.speechSynthesis.onvoiceschanged = loadVoices;
+      } else {
+        setHearStatus('Speech synthesis is not available in this build.', 'error');
+      }
+
+      rateEl.addEventListener('input', () => { rateVal.textContent = Number(rateEl.value).toFixed(1) + '×'; });
+      pitchEl.addEventListener('input', () => { pitchVal.textContent = Number(pitchEl.value).toFixed(1); });
+      styleSel.addEventListener('change', applyStyle);
+      voiceSel.addEventListener('change', () => {
+        try {
+          const v = voices[Number(voiceSel.value)];
+          if (v) localStorage.setItem('voiceName', v.name);
+        } catch {}
+      });
+
+      function speak(text) {
+        if (!text || !window.speechSynthesis) return;
+        window.speechSynthesis.cancel();
+        const u = new SpeechSynthesisUtterance(text);
+        const v = voices[Number(voiceSel.value)];
+        if (v) u.voice = v;
+        u.rate = Number(rateEl.value);
+        u.pitch = Number(pitchEl.value);
+        u.onend = () => setHearStatus('Done.', 'ok');
+        u.onerror = (e) => setHearStatus('Could not speak: ' + (e.error || 'unknown error'), 'error');
+        window.speechSynthesis.speak(u);
+        setHearStatus('Speaking…');
+      }
+
+      if (api && api.voice && api.voice.onMuseReply) {
+        api.voice.onMuseReply((text) => {
+          if (!text) return;
+          showReply(text);
+          if (autoHearEl.checked) speak(text);
+          else setHearStatus('New reply — auto-hear is off.', '');
+        });
+      }
+
+      stopBtn.addEventListener('click', () => {
+        try { window.speechSynthesis.cancel(); } catch {}
+        setHearStatus('Stopped.');
+      });
+
+      // Matrix rain — light, throttled, pauses when hidden, respects reduced motion.
+      (() => {
+        if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+        const canvas = document.getElementById('matrix-rain');
+        const ctx = canvas.getContext('2d');
+        const GLYPHS = 'アカサタナハマヤラワ0123456789{}();=>+-*/<>#$';
+        const FONT = 14;
+        let cols = 0, drops = [];
+        const resize = () => {
+          canvas.width = window.innerWidth; canvas.height = window.innerHeight;
+          cols = Math.floor(canvas.width / FONT);
+          drops = Array.from({ length: cols }, () => Math.floor(Math.random() * -60));
+        };
+        resize(); window.addEventListener('resize', resize);
+        let last = 0;
+        const frame = (ts) => {
+          requestAnimationFrame(frame);
+          if (document.hidden || ts - last < 50) return;
+          last = ts;
+          ctx.fillStyle = 'rgba(0,0,0,0.08)'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+          ctx.font = FONT + 'px monospace'; ctx.fillStyle = '#00e676';
+          for (let i = 0; i < cols; i++) {
+            ctx.fillText(GLYPHS[Math.floor(Math.random() * GLYPHS.length)], i * FONT, drops[i] * FONT);
+            if (drops[i] * FONT > canvas.height && Math.random() > 0.976) drops[i] = 0;
+            drops[i]++;
+          }
+        };
+        requestAnimationFrame(frame);
+      })();
+    </script>
+  </body>
+</html>

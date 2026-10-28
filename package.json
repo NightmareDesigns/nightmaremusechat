@@ -1,0 +1,51 @@
+{
+  "build": {
+    "appId": "ai.muse.windows.unofficial",
+    "directories": {
+      "buildResources": "assets",
+      "output": "dist"
+    },
+    "files": [
+      "src/**/*",
+      "assets/**/*",
+      "package.json"
+    ],
+    "nsis": {
+      "allowToChangeInstallationDirectory": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "oneClick": true,
+      "perMachine": false,
+      "shortcutName": "Nightmare Muse Chat"
+    },
+    "portable": {
+      "artifactName": "Nightmare-Chat-${version}.exe",
+      "requestExecutionLevel": "user"
+    },
+    "productName": "Nightmare Muse Chat",
+    "win": {
+      "icon": "assets/icon.ico",
+      "target": [
+        "portable"
+      ]
+    }
+  },
+  "description": "Nightmare Muse Chat \u2014 unofficial Windows desktop client for use with Muse (muse.ai). Not affiliated with Meta. One-click portable .exe, no dependencies. System tray, quick-chat hotkey, and launch on startup.",
+  "devDependencies": {
+    "electron": "^33.2.0",
+    "electron-builder": "^24.13.3"
+  },
+  "license": "MIT",
+  "main": "src/main.js",
+  "name": "muse-windows",
+  "private": false,
+  "scripts": {
+    "dev": "electron . --dev",
+    "dist": "electron-builder --win portable",
+    "dist:installer": "electron-builder --win nsis",
+    "dist:portable": "electron-builder --win portable",
+    "pack": "electron-builder --dir",
+    "start": "electron ."
+  },
+  "version": "0.3.11"
+}
